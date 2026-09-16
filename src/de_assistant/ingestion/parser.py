@@ -1,133 +1,152 @@
-import re
 from pathlib import Path
+from typing import Any
 
 from markdown_it import MarkdownIt
+import yaml
 
 from de_assistant.ingestion.models import Document
 
 
-FRONTMATTER_PATTERN = re.compile(
-    r"\A---\s*\n(.*?)\n---\s*\n?",
-    re.DOTALL,
-)
-
-
-def parse_frontmatter(text: str) -> tuple[dict[str, object], str]:
+def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """
-    Extract simple YAML-like frontmatter.
-
-    Example:
-
-    ---
-    title: Data Modeling
-    domain: data-engineering
-    tags:
-      - dbt
-      - dimensional-modeling
-    ---
+    Parse YAML frontmatter from a Markdown document.
     """
-    match = FRONTMATTER_PATTERN.match(text)
-
-    if not match:
+    if not text.startswith("---"):
         return {}, text
 
-    raw = match.group(1)
-    metadata: dict[str, object] = {}
+    parts = text.split("---", 2)
 
-    current_list_key: str | None = None
+    if len(parts) < 3:
+        return {}, text
 
-    for line in raw.splitlines():
-        stripped = line.strip()
+    _, raw_frontmatter, body = parts
 
-        if not stripped:
-            continue
+    metadata = yaml.safe_load(raw_frontmatter) or {}
 
-        if stripped.startswith("- ") and current_list_key:
-            values = metadata.setdefault(current_list_key, [])
-            if isinstance(values, list):
-                values.append(stripped[2:].strip())
-            continue
+    if not isinstance(metadata, dict):
+        metadata = {}
 
-        if ":" not in line:
-            continue
-
-        key, value = line.split(":", 1)
-        key = key.strip()
-        value = value.strip()
-
-        if not value:
-            metadata[key] = []
-            current_list_key = key
-        else:
-            metadata[key] = value.strip("\"'")
-            current_list_key = None
-
-    return metadata, text[match.end():]
+    return metadata, body.lstrip()
 
 
-def parse_markdown(path: str | Path) -> list[Document]:
-    """Parse a Markdown file into heading-based documents."""
-    path = Path(path)
+def parse_markdown(path: Path) -> list[Document]:
+    """
+    Parse a Markdown file into heading-aware Documents.
+    """
     text = path.read_text(encoding="utf-8")
 
-    metadata, markdown = parse_frontmatter(text)
+    metadata, body = parse_frontmatter(text)
 
     md = MarkdownIt()
-    tokens = md.parse(markdown)
+    tokens = md.parse(body)
+
+    title = metadata.get("title")
 
     documents: list[Document] = []
 
-    title = str(metadata.get("title") or path.stem)
-
     current_heading: str | None = None
+    current_heading_level: int | None = None
     current_content: list[str] = []
 
-    def flush() -> None:
-        if not current_content:
-            return
+    inside_heading = False
+    heading_buffer: list[str] = []
+
+    def flush_document() -> None:
+        nonlocal current_content
 
         content = "\n".join(current_content).strip()
 
         if not content:
+            current_content = []
             return
+
+        document_metadata = {
+            **metadata,
+        }
+
+        if current_heading_level is not None:
+            document_metadata["heading_level"] = current_heading_level
 
         documents.append(
             Document(
                 source=str(path),
-                title=title,
+                title=title or current_heading or path.stem,
                 heading=current_heading,
                 content=content,
-                metadata=metadata.copy(),
+                metadata=document_metadata,
             )
         )
 
+        current_content = []
+
     for token in tokens:
+        # ---------------------------------------------------------
+        # Heading
+        # ---------------------------------------------------------
         if token.type == "heading_open":
-            flush()
-            current_content.clear()
+            flush_document()
 
-        elif token.type == "inline":
-            text_content = token.content.strip()
+            inside_heading = True
+            heading_buffer = []
 
-            if current_heading is None:
-                # First heading becomes the document title if no
-                # explicit frontmatter title exists.
-                if title == path.stem:
-                    title = text_content
+            current_heading_level = int(token.tag[1])
 
-                current_heading = text_content
-            else:
-                current_content.append(text_content)
-
-        elif token.type in {"paragraph_close", "heading_close"}:
             continue
 
-        elif token.type == "fence":
-            current_content.append(token.content.strip())
+        if token.type == "heading_close":
+            current_heading = " ".join(heading_buffer).strip()
 
-        elif token.type == "code_block":
-            current_content.append(token.content.strip())
+            if title is None and current_heading_level == 1:
+                title = current_heading
 
-    flush()
+            inside_heading = False
+            heading_buffer = []
+
+            continue
+
+        # ---------------------------------------------------------
+        # Inline text
+        # ---------------------------------------------------------
+        if token.type == "inline":
+            text_content = token.content.strip()
+
+            if inside_heading:
+                heading_buffer.append(text_content)
+            elif text_content:
+                current_content.append(text_content)
+
+            continue
+
+        # ---------------------------------------------------------
+        # Fenced code block
+        # ---------------------------------------------------------
+        if token.type == "fence":
+            code = token.content.rstrip()
+
+            language = token.info.strip()
+
+            if language:
+                current_content.append(
+                    f"```{language}\n{code}\n```"
+                )
+            else:
+                current_content.append(
+                    f"```\n{code}\n```"
+                )
+
+            continue
+
+        # ---------------------------------------------------------
+        # Indented code block
+        # ---------------------------------------------------------
+        if token.type == "code_block":
+            current_content.append(
+                f"```\n{token.content.rstrip()}\n```"
+            )
+
+            continue
+
+    # Flush final section
+    flush_document()
 
     return documents

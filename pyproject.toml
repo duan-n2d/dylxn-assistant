@@ -12,13 +12,11 @@ dependencies = [
     "httpx>=0.28.1",
     "markdown-it-py>=4.2.0",
     "pydantic-settings>=2.15.0",
+    "pyyaml>=6.0.3",
     "qdrant-client>=1.19.0",
     "sentence-transformers>=6.0.1",
     "uvicorn>=0.53.0",
 ]
-
-[project.scripts]
-dylxn-assistant = "dylxn_assistant:main"
 
 [build-system]
 requires = ["uv_build>=0.12.14,<0.13.0"]

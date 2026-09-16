@@ -1,0 +1,2 @@
+- Data Warehouse Toolkit - Ralph Kimball, Margy Ross
+- Building a Scalable Data Warehouse with Data Vault 2.0 - Dan Linstedt , Michael Olschimke
