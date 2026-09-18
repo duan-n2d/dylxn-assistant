@@ -1,3 +1,6 @@
+import json
+from collections.abc import Iterator
+
 import httpx
 
 
@@ -37,3 +40,38 @@ class OllamaLLM:
         data = response.json()
 
         return data["response"]
+
+    def stream_generate(
+        self,
+        prompt: str,
+        system: str | None = None,
+    ) -> Iterator[str]:
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": True,
+        }
+
+        if system:
+            payload["system"] = system
+
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/api/generate",
+            json=payload,
+            timeout=self.timeout,
+        ) as response:
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                chunk = data.get("response")
+                if chunk:
+                    yield chunk

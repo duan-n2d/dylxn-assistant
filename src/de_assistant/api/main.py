@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from de_assistant.config import settings
-from de_assistant.llm.mock import MockLLM
+from de_assistant.llm.factory import get_llm_client
 from de_assistant.rag import RAGService
 from de_assistant.retrieval.retriever import Retriever
 
@@ -22,7 +22,11 @@ retriever = Retriever(
     limit=settings.retrieval_limit,
 )
 
-llm = MockLLM()
+llm = get_llm_client(
+    settings.llm_provider,
+    model=settings.ollama_model,
+    base_url=settings.ollama_base_url,
+)
 
 rag = RAGService(
     retriever=retriever,

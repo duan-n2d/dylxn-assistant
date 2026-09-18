@@ -2,6 +2,7 @@ from de_assistant.ingestion.chunker import chunk_documents
 from de_assistant.ingestion.loader import load_markdown_files
 from de_assistant.ingestion.parser import parse_markdown
 from de_assistant.retrieval.embeddings import embed_documents
+from de_assistant.retrieval.keyword_store import index_chunks
 from de_assistant.retrieval.vector_store import (
     create_collection,
     get_client,
@@ -64,6 +65,8 @@ def main() -> None:
         chunks,
         embeddings,
     )
+
+    index_chunks(chunks)
 
     # ---------------------------------------------------------
     # Summary

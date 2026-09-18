@@ -113,31 +113,35 @@ Streamlit UI / MCP
 * Local embedding generation
 * `multilingual-e5-small` embeddings
 * Persistent local Qdrant vector database
-* Semantic retrieval
+* Hybrid retrieval with SQLite FTS5 keyword search
+* Retrieval score fusion and threshold filtering
 * RAG context construction
 * Source metadata and retrieval scores
 * Pluggable LLM interface
 * Mock LLM for development
 * Ollama LLM client
+* LLM factory with provider selection
+* Configurable provider via settings
+* Streaming generation support in the LLM interface
 * FastAPI API
 * `/health` endpoint
 * `/ask` endpoint
+* Assistant mode scaffold with conversation history and citations
+* Streamlit UI starter shell
+* MCP server starter shell
+* Knowledge graph starter model
 * Automated tests
 
 ### Planned
 
-* Hybrid search with SQLite FTS5
-* Retrieval score fusion
-* Reranking
-* Real Ollama integration
-* Conversation memory
-* Streaming responses
-* Streamlit UI
-* MCP server
-* Knowledge graph / entity relationships
-* Learning and interview modes
-* Better citation rendering
-* Evaluation dataset and RAG metrics
+* Reranking layer
+* Retrieval evaluation dataset and RAG metrics
+* Advanced conversation memory persistence
+* More polished citation rendering
+* Richer Streamlit experience
+* Full MCP tool surface
+* Graph-aware retrieval and entity extraction
+* Dedicated learning / interview workflows
 
 ---
 
@@ -182,6 +186,10 @@ dylxn-assistant/
 │       │   ├── __init__.py
 │       │   └── main.py
 │       │
+│       ├── assistant.py
+│       │
+│       ├── knowledge_graph.py
+│       │
 │       ├── ingestion/
 │       │   ├── __init__.py
 │       │   ├── loader.py
@@ -192,6 +200,7 @@ dylxn-assistant/
 │       ├── retrieval/
 │       │   ├── __init__.py
 │       │   ├── embeddings.py
+│       │   ├── keyword_store.py
 │       │   ├── vector_store.py
 │       │   ├── retriever.py
 │       │   └── context.py
@@ -199,9 +208,18 @@ dylxn-assistant/
 │       ├── llm/
 │       │   ├── __init__.py
 │       │   ├── client.py
+│       │   ├── factory.py
 │       │   ├── mock.py
 │       │   ├── ollama.py
 │       │   └── prompts.py
+│       │
+│       ├── mcp/
+│       │   ├── __init__.py
+│       │   └── server.py
+│       │
+│       ├── ui/
+│       │   ├── __init__.py
+│       │   └── streamlit_app.py
 │       │
 │       ├── config.py
 │       └── rag.py
@@ -218,10 +236,12 @@ dylxn-assistant/
 │   └── test_ollama.py
 │
 ├── tests/
-│   ├── test_ingestion.py
+│   ├── test_context.py
 │   ├── test_embeddings.py
+│   ├── test_ingestion.py
+│   ├── test_llm_factory.py
 │   ├── test_retriever.py
-│   └── test_context.py
+│   └── test_assistant.py
 │
 ├── data/
 │   └── qdrant/
@@ -554,7 +574,15 @@ http://localhost:8000/openapi.json
 
 # Ollama
 
-The project contains an `OllamaLLM` implementation, but Ollama is not required in Codespaces.
+The project contains an `OllamaLLM` implementation and a provider factory, but Ollama is not required in Codespaces.
+
+Use the provider selector in settings:
+
+```env
+LLM_PROVIDER=mock
+# or
+LLM_PROVIDER=ollama
+```
 
 Check whether Ollama is installed:
 
@@ -604,7 +632,9 @@ tests/
 ├── test_context.py
 ├── test_embeddings.py
 ├── test_ingestion.py
-└── test_retriever.py
+├── test_llm_factory.py
+├── test_retriever.py
+└── test_assistant.py
 ```
 
 Run a specific test:
@@ -781,34 +811,34 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 2 — Retrieval
 
-* [ ] SQLite FTS5
-* [ ] Hybrid retrieval
-* [ ] Score fusion
-* [ ] Retrieval threshold
+* [x] SQLite FTS5
+* [x] Hybrid retrieval
+* [x] Score fusion
+* [x] Retrieval threshold
 * [ ] Reranker
 * [ ] Retrieval evaluation dataset
 
 ## Phase 3 — Local LLM
 
 * [x] Ollama client
-* [ ] LLM factory
-* [ ] Configurable LLM provider
-* [ ] Local model testing
-* [ ] Streaming generation
+* [x] LLM factory
+* [x] Configurable LLM provider
+* [x] Local model testing
+* [x] Streaming generation
 
 ## Phase 4 — Assistant
 
-* [ ] Conversation history
-* [ ] Better citations
-* [ ] Ask mode
-* [ ] Learn mode
-* [ ] Compare mode
-* [ ] Design mode
-* [ ] Interview mode
+* [x] Conversation history scaffold
+* [x] Better citations scaffold
+* [x] Ask mode scaffold
+* [x] Learn mode scaffold
+* [x] Compare mode scaffold
+* [x] Design mode scaffold
+* [x] Interview mode scaffold
 
 ## Phase 5 — UI
 
-* [ ] Streamlit application
+* [x] Streamlit application starter shell
 * [ ] Source viewer
 * [ ] Retrieval debugging panel
 * [ ] Conversation interface
@@ -816,7 +846,7 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 6 — MCP
 
-* [ ] MCP server
+* [x] MCP server starter shell
 * [ ] Knowledge search tool
 * [ ] RAG tool
 * [ ] Knowledge inspection tools

@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from de_assistant.llm.client import LLMClient
 
 
@@ -19,3 +21,12 @@ class MockLLM:
             "The RAG pipeline successfully generated "
             "a prompt for the LLM."
         )
+
+    def stream_generate(
+        self,
+        prompt: str,
+        system: str | None = None,
+    ) -> Iterator[str]:
+        text = self.generate(prompt=prompt, system=system)
+        for chunk in text.split():
+            yield chunk + " "
