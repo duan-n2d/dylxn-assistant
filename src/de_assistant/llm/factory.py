@@ -21,6 +21,8 @@ def get_llm_client(
         return OllamaLLM(
             model=model or settings.ollama_model,
             base_url=base_url or settings.ollama_base_url,
+            timeout=settings.ollama_timeout,
+            num_predict=settings.ollama_num_predict,
         )
 
     raise ValueError(

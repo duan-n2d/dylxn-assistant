@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from de_assistant.config import settings
 from de_assistant.retrieval.retriever import RetrievedChunk
 
 
@@ -18,17 +19,20 @@ def build_context(
     Each chunk receives a stable citation number.
     """
     sections: list[str] = []
+    remaining = settings.context_max_chars
 
     for index, chunk in enumerate(chunks, start=1):
-        sections.append(
-            f"""[Source {index}]
+        section = f"""[Source {index}]
 Title: {chunk.title}
 Section: {chunk.heading or "Root"}
 Source: {chunk.source}
 
 {chunk.content}
-"""
-        )
+    """
+        if remaining <= 0:
+            break
+        sections.append(section[:remaining])
+        remaining -= len(section)
 
     return Context(
         text="\n\n".join(sections),

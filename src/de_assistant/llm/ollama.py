@@ -10,10 +10,12 @@ class OllamaLLM:
         model: str = "qwen3:4b",
         base_url: str = "http://localhost:11434",
         timeout: float = 120.0,
+        num_predict: int = 256,
     ) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.num_predict = num_predict
 
     def generate(
         self,
@@ -24,6 +26,7 @@ class OllamaLLM:
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "options": {"num_predict": self.num_predict},
         }
 
         if system:
@@ -50,6 +53,7 @@ class OllamaLLM:
             "model": self.model,
             "prompt": prompt,
             "stream": True,
+            "options": {"num_predict": self.num_predict},
         }
 
         if system:

@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -108,9 +109,11 @@ def keyword_search(
     if not query or not query.strip():
         return []
 
-    normalized = " ".join(query.split())
-    if not normalized:
+    terms = re.findall(r"[^\W_]+", query, flags=re.UNICODE)
+    if not terms:
         return []
+
+    normalized = " ".join(f'"{term}"' for term in terms)
 
     with get_connection(db_path) as connection:
         rows = connection.execute(

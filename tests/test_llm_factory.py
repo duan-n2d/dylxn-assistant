@@ -1,6 +1,13 @@
+from de_assistant.config import Settings
 from de_assistant.llm.factory import get_llm_client
 from de_assistant.llm.mock import MockLLM
 from de_assistant.llm.ollama import OllamaLLM
+
+
+def test_settings_include_ollama_timeout() -> None:
+    settings = Settings()
+
+    assert settings.ollama_timeout == 600.0
 
 
 def test_get_llm_client_mock() -> None:
