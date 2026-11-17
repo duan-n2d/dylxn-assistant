@@ -15,6 +15,8 @@ tags:
   - snowflake-schema
   - star-schema
   - data-vault
+  - cardinality
+  - relational-model
 ---
 
 # Data Modeling & dbt
@@ -176,6 +178,25 @@ create table order_items (order_id int references orders, product_id varchar ref
 
 ---
 
+## Relational Model — gốc gác lý thuyết của normalization
+
+Toàn bộ normalization (1NF, 2NF, 3NF) ở trên dựa trên **relational model**, do Edgar F. Codd đề xuất năm 1969 (công bố rộng rãi năm 1970, "A Relational Model of Data for Large Shared Data Banks"). Đây là nền tảng lý thuyết của mọi RDBMS (Postgres, MySQL, Snowflake, BigQuery...).
+
+Relational model dùng vài thuật ngữ hình thức mà SQL ngày nay vẫn còn giữ dấu vết, dù ta quen gọi theo tên thông dụng hơn:
+
+```text
+relation (quan hệ)  → tương đương "table"
+tuple (bộ)          → tương đương "row"
+attribute (thuộc tính) → tương đương "column"
+domain (miền giá trị)  → tập giá trị hợp lệ mà một attribute có thể nhận (vd. domain của order_status là {'completed','cancelled','pending'})
+```
+
+Ví dụ: `orders(order_id, customer_id, order_status)` là một relation; mỗi dòng dữ liệu là một tuple; `order_status` là một attribute với domain hữu hạn gồm các trạng thái hợp lệ — đây chính là lý do dbt test hay dùng `accepted_values` để enforce domain đó.
+
+**ORM nằm ở đâu?** ORM (Object-Relational Mapping — ví dụ SQLAlchemy, Prisma, Hibernate) là lớp dịch giữa code hướng đối tượng (object, class, instance) trong app backend và relational model (relation, tuple, attribute) trong database. Nó cho phép dev viết `Order.objects.filter(status='completed')` thay vì SQL thô, nhưng bản chất vẫn đang thao tác trên relation/tuple phía dưới — hiểu relational model giúp debug N+1 query hay migration của ORM dễ hơn nhiều.
+
+---
+
 # 3. Snowflake Schema
 
 ## Snowflake Schema — so sánh snowflake schema với star schema
@@ -229,11 +250,57 @@ Trên star schema chỉ cần 1 join tới `dim_products`.
 
 ---
 
-# 4. Câu hỏi tự kiểm tra
+# 4. Cardinality
+
+## Cardinality — và vì sao hay bị nhầm với grain
+
+**Cardinality là gì?** Cardinality là **số lượng giá trị khác nhau (distinct values) trong một cột**. Ví dụ `order_status` có cardinality thấp (chỉ vài giá trị: completed, cancelled, pending), còn `customer_id` hoặc `email` có cardinality cao (gần bằng số row).
+
+**Phân biệt với grain** — hai khái niệm rất hay bị nhầm vì đều liên quan đến "bao nhiêu":
+
+```text
+Cardinality = độ đa dạng giá trị bên trong MỘT CỘT
+Grain       = mức chi tiết của MỘT ROW/BẢNG
+```
+
+Nói cách khác, cardinality hỏi "cột này có bao nhiêu giá trị khác nhau", còn grain hỏi "một dòng trong bảng này đại diện cho cái gì". Một bảng `fact_order_items` (grain = 1 row per item) vẫn có thể chứa cột `order_status` cardinality thấp và cột `order_item_id` cardinality cao (gần như unique) cùng lúc.
+
+**Cardinality và giới hạn pre-aggregate OLAP cube.** Cardinality của các dimension quyết định số lượng combination mà một OLAP cube phải pre-compute nếu muốn full cube (tính sẵn tổng cho mọi tổ hợp dimension). Ví dụ:
+
+```text
+12 tháng x 10 sản phẩm x 5 khu vực = 600 combinations
+```
+
+600 vẫn nhỏ, nhưng thêm vài dimension cardinality cao hơn, số combination bùng nổ theo kiểu nhân (combinatorial explosion):
+
+```text
+12 tháng x 10 sản phẩm x 5 khu vực x 1,000 khách hàng x 50 campaign
+= 12 x 10 x 5 x 1,000 x 50
+= 30,000,000 combinations
+```
+
+Chỉ cần một dimension có cardinality vài nghìn (customer_id, product_id thật trong production thường cao hơn nhiều so với ví dụ 10/5 ở trên) là full cube pre-aggregate trở nên bất khả thi về storage lẫn thời gian tính — đây là lý do các OLAP engine hiện đại (BigQuery, Snowflake, Druid, ClickHouse) không pre-compute mọi tổ hợp mà dùng columnar scan + on-the-fly aggregate, hoặc chỉ pre-aggregate các combination hay dùng nhất (partial cube / materialized view có chọn lọc).
+
+```sql
+-- Ước lượng cardinality của một dimension trước khi thiết kế pre-aggregate
+select
+    count(distinct customer_id) as customer_cardinality,
+    count(distinct product_id)  as product_cardinality,
+    count(distinct region)      as region_cardinality
+from fact_order_items;
+```
+
+**Pitfall:** dimension cardinality cao (customer_id, email, session_id) không nên đưa vào GROUP BY của một materialized pre-aggregate table — hãy giữ fact table ở grain chi tiết cho các dimension cardinality cao, và chỉ pre-aggregate theo các dimension cardinality thấp (ngày, tháng, category, region).
+
+---
+
+# 5. Câu hỏi tự kiểm tra
 
 ```text
 1. Vì sao customer_id không đủ làm primary key cho dim_customers Type 2?
 2. Vì sao row_number() không phải cách tốt để tạo surrogate key?
 3. Cho ví dụ phụ thuộc bắc cầu vi phạm 3NF.
 4. Khi nào snowflake schema đáng để thêm join?
+5. Cardinality khác grain như thế nào? Cho một ví dụ cụ thể.
+6. Vì sao full cube pre-aggregate trở nên bất khả thi khi dimension cardinality cao?
 ```

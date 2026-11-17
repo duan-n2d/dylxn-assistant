@@ -11,6 +11,8 @@ tags:
   - dimension-table
   - star-schema
   - double-counting
+  - nested-data
+  - granularity
 ---
 # Data Modeling & dbt
 
@@ -183,6 +185,52 @@ Nếu `revenue = 1,000,000`, sau join sai có thể thành:
 ```
 
 Đây là **double counting**, hoặc chính xác hơn trong case này là **multiplicative counting**.
+
+---
+
+## 3.4. Grain lồng trong một bảng: nested struct/array
+
+Tách `fact_orders` và `fact_order_items` thành hai bảng riêng (grain khác nhau) là cách truyền thống, chạy tốt trên mọi warehouse kể cả row-based cũ. Nhưng trên các engine columnar hiện đại (BigQuery, Snowflake, DuckDB), có một lựa chọn khác: giữ quan hệ 1-to-many ngay **trong một bảng wide**, bằng cách lồng grain chi tiết hơn dưới dạng `ARRAY<STRUCT<...>>` (BigQuery) hoặc `STRUCT`/`LIST` (DuckDB, Snowflake).
+
+Ví dụ `fact_orders` ở DuckDB, mỗi order là 1 row, nhưng line items nằm lồng bên trong dưới dạng list of struct:
+
+```sql
+select
+    order_id,
+    customer_id,
+    order_date,
+    list(struct_pack(
+        product_id := product_id,
+        quantity   := quantity,
+        item_amount := item_amount
+    )) as line_items
+from {{ ref('stg_order_items') }}
+group by order_id, customer_id, order_date
+```
+
+Kết quả: 1 row per order ở top level (grain của bảng), nhưng grain chi tiết hơn — 1 phần tử trong `line_items` per product — vẫn truy vấn được bằng `unnest`/`cross join unnest`:
+
+```sql
+select
+    order_id,
+    item.product_id,
+    item.quantity
+from fact_orders, unnest(line_items) as item
+```
+
+Trên BigQuery, cú pháp tương đương là `ARRAY<STRUCT<product_id INT64, quantity INT64, item_amount NUMERIC>>` và `UNNEST(line_items)`.
+
+**Tradeoff so với fact table riêng ở grain mịn hơn:**
+
+```text
+- Nested array đọc nhanh hơn khi câu hỏi luôn ở mức order (không cần join)
+- Nhưng aggregate theo product trên toàn bộ bảng phải unnest trước, tốn compute hơn một fact_order_items đã flatten sẵn
+- Nested array không join tốt với dimension khác (vd. dim_products) bằng SQL JOIN thông thường — phải unnest trước
+- Nhiều BI tool/semantic layer chưa hỗ trợ tốt nested field, trong khi star schema phẳng thì tool nào cũng đọc được
+- Dùng nested khi line items chỉ phục vụ hiển thị/export theo order (ví dụ invoice), dùng fact table riêng khi cần aggregate/join thường xuyên theo grain mịn
+```
+
+Nói cách khác: nested struct/array là một kỹ thuật biểu diễn grain mịn hơn *bên trong* một bảng, không phải thay thế hoàn toàn cho việc tách fact table theo grain — nó phù hợp nhất khi dữ liệu lồng chủ yếu được đọc nguyên khối, không phải aggregate rời rạc.
 
 ---
 

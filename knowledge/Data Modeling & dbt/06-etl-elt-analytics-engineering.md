@@ -10,6 +10,7 @@ tags:
   - etl
   - elt
   - etl-vs-elt
+  - etlt
   - analytics-engineering
   - dbt
   - modern-data-stack
@@ -140,6 +141,21 @@ Chọn ETL (hoặc bước T trước load) khi:
 Thực tế hầu hết hệ thống là **hybrid**: một chút "T" nhẹ khi ingest (parse JSON, mask PII, dedupe event) rồi ELT với dbt cho toàn bộ business logic. Đừng tranh luận tên gọi — điều quan trọng là raw data có được giữ lại, logic có được version control và test hay không.
 
 **Pitfall khi chuyển từ ETL sang ELT:** bê nguyên stored procedure khổng lồ vào một dbt model. Hãy tách lại theo staging → intermediate → marts như Bài 1.
+
+## EtLT (ETLT) — tên gọi chính thức cho pattern hybrid
+
+Pattern hybrid vừa nhắc ở trên có một tên riêng: **EtLT** (cũng viết **ETLT**), viết chữ "t" thường ở giữa để nhấn mạnh đây là một bước transform **nhỏ, nhẹ** — khác với chữ "T" hoa, đầy đủ, nằm sau "L":
+
+```text
+E   → Extract: lấy dữ liệu từ nguồn
+t   → transform nhẹ ngay lúc ingest: parse JSON/Avro, mask PII, dedupe, chuẩn hoá encoding, flatten field lồng cơ bản
+L   → Load: ghi vào warehouse/lakehouse (thường vào schema raw)
+T   → Transform đầy đủ bằng SQL trong warehouse: join, aggregate, dimensional model (đây là phần dbt đảm nhiệm)
+```
+
+EtLT xuất hiện vì ELT thuần tuý ("load nguyên trạng rồi transform hết trong SQL") đôi khi không khả thi: một số việc buộc phải làm trước khi data rời khỏi pipeline ingest — ví dụ mask số thẻ tín dụng vì lý do compliance, hoặc parse một blob JSON lồng sâu thành column phẳng để dbt có thể `select` được. Những việc này do connector ingest (Fivetran, Airbyte, dlt, custom script) đảm nhiệm ở bước `t` nhỏ, còn toàn bộ business logic (grain, fact/dimension, metric) vẫn nằm ở bước `T` lớn trong dbt.
+
+Nói cách khác: project Bài 2–5 của bạn, nếu nhìn kỹ, đã luôn là EtLT chứ không phải ELT thuần — `dbt seed` cast kiểu dữ liệu cơ bản trước khi vào `raw_*` cũng có thể xem là một chút `t` nhẹ, trước khi `dbt run` làm phần `T` đầy đủ.
 
 ---
 
