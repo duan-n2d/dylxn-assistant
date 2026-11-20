@@ -58,7 +58,7 @@ Current architecture:
                                   │
                                   ▼
                               /ask API
-````
+```
 
 ### Planned architecture
 
@@ -113,8 +113,7 @@ Streamlit UI / MCP
 * Local embedding generation
 * `multilingual-e5-small` embeddings
 * Persistent local Qdrant vector database
-* Hybrid retrieval with SQLite FTS5 keyword search
-* Retrieval score fusion and threshold filtering
+* SQLite FTS5 keyword index (built alongside Qdrant by `build_index.py`)
 * RAG context construction
 * Source metadata and retrieval scores
 * Pluggable LLM interface
@@ -131,6 +130,23 @@ Streamlit UI / MCP
 * MCP server starter shell
 * Knowledge graph starter model
 * Automated tests
+
+### Status / known gaps
+
+* **Retrieval is effectively semantic-only today.** The retriever queries both Qdrant and the SQLite FTS5 index and has weighted score fusion code, but the keyword path does not contribute yet:
+  * SQLite `bm25()` returns negative scores (more negative = better match), and `_normalize_keyword_score` clamps them to `0`, so keyword scores never affect ranking. Keyword-only matches are appended with a score of `0`.
+  * `keyword_search` quotes every query term and joins them with spaces, which FTS5 treats as AND, so most natural-language questions match nothing.
+  * Fixing the keyword path (score normalization + OR/prefix matching) is in progress.
+* **No threshold filtering in practice.** `Retriever` accepts `min_score`, but it defaults to `0.0` and is not set by the API or scripts.
+
+### Scaffolds (not wired into the API yet)
+
+These modules exist and are covered by unit tests, but nothing in the API or scripts uses them:
+
+* `assistant.py` — `AssistantService` with in-memory conversation history, mode enum (ask / learn / compare / design / interview), prompt and citation helpers
+* `mcp/server.py` — `MCPServer` is a plain dataclass that holds a list of named tools; it does not use the MCP SDK and registers no tools
+* `knowledge_graph.py` — `KnowledgeGraph` is an in-memory entity/relation dictionary
+* `ui/streamlit_app.py` — a Streamlit page that only echoes the question back; `streamlit` is not listed in `pyproject.toml`, so install it separately to try it
 
 ### Planned
 
@@ -811,10 +827,10 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 2 — Retrieval
 
-* [x] SQLite FTS5
-* [x] Hybrid retrieval
-* [x] Score fusion
-* [x] Retrieval threshold
+* [x] SQLite FTS5 index
+* [ ] Hybrid retrieval (keyword path is queried but does not affect ranking yet — see Status)
+* [ ] Score fusion (code exists; BM25 scores are clamped to 0)
+* [ ] Retrieval threshold (`min_score` parameter exists, not configured)
 * [ ] Reranker
 * [ ] Retrieval evaluation dataset
 
@@ -828,6 +844,8 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 4 — Assistant
 
+Scaffolds only — used in tests, not yet wired into `/ask`.
+
 * [x] Conversation history scaffold
 * [x] Better citations scaffold
 * [x] Ask mode scaffold
@@ -838,7 +856,7 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 5 — UI
 
-* [x] Streamlit application starter shell
+* [x] Streamlit application starter shell (echoes the question only)
 * [ ] Source viewer
 * [ ] Retrieval debugging panel
 * [ ] Conversation interface
@@ -846,7 +864,7 @@ This makes the knowledge system easier to debug and version.
 
 ## Phase 6 — MCP
 
-* [x] MCP server starter shell
+* [x] MCP server starter shell (plain dataclass, no MCP SDK yet)
 * [ ] Knowledge search tool
 * [ ] RAG tool
 * [ ] Knowledge inspection tools
@@ -916,7 +934,3 @@ What questions should I expect about dimensional modeling?
 # License
 
 This project is currently intended as a personal learning and portfolio project.
-
-```
-
-One small correction from the earlier README direction: **don't claim hybrid search is already implemented**. Your current retriever is semantic/Qdrant-only; SQLite FTS5 should remain under the roadmap until we actually build it.
